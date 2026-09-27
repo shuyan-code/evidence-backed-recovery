@@ -2,6 +2,8 @@
   "case_id": "CASE-1042",
   "severity": "high",
   "failure": "Three scheduled exports failed during onboarding.",
+  "repair_action": "Restore the export schedule and monitor three runs.",
+  "recovery_criterion": "Three consecutive scheduled exports complete successfully.",
   "evidence": [
     {"id": "E1", "kind": "independent_record", "source": "incident-482", "observation": "Export job failed on three scheduled runs."},
     {"id": "E2", "kind": "customer_statement", "source": "ticket-1042", "observation": "Customer said the delay blocked launch."}
@@ -10,7 +12,6 @@
   "emotion_signal": {"label": "frustration", "evidence_id": "E2"},
   "proposal": {
     "remedy": "service_credit", "amount": "75.00", "currency": "USD",
-    "owner": "support-lead", "follow_up_due": "2026-10-01"
+    "owner": "support-lead", "follow_up_due": "2026-09-01"
   }
 }
-

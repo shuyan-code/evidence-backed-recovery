@@ -11,6 +11,6 @@ python -m unittest discover -s tests -v
 python path/to/skill-creator/scripts/quick_validate.py skills/evidence-backed-recovery
 ```
 
-The second command uses the Codex skill-creator validator when available; CI performs structural checks independently. Keep the skill's description narrow, preserve the distinction between a proposal and authorization, and add behavioral tests for changes to policy or ledger logic.
+The second command uses the Codex skill-creator validator when available; CI performs structural checks independently on Windows and Linux. Keep the skill's description narrow, preserve the distinction between a proposal and authorization, and add behavioral tests for policy, evidence, observation windows, and ledger migrations. Update the skill contract, examples, README, and market analysis when an interface or product claim changes.
 
 All project code, comments, skill instructions, and documentation are in English.

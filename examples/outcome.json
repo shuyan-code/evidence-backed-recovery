@@ -1,6 +1,9 @@
 {
-  "resolution": "resolved", "retained": "unknown",
-  "repeat_complaint": false, "actual_amount": "75.00",
+  "resolution": "resolved", "resolution_basis": "independent_record",
+  "resolution_evidence_ref": "monitoring-771", "retained": "unknown",
+  "repeat_complaint": false, "repeat_window_end": "2026-09-08",
+  "repeat_check_ref": "ticket-query-771", "actual_amount": "75.00",
+  "follow_up_completed_at": "2026-09-01",
   "approval_ref": "synthetic-approval-example",
-  "recorded_at": "2026-10-02"
+  "recorded_at": "2026-09-09"
 }

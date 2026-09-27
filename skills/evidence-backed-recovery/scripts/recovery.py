@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
 import sqlite3
 import sys
 from contextlib import closing
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 from pathlib import Path
 
@@ -70,6 +71,8 @@ def assess(case: dict, policy: dict) -> dict:
     if severity not in SEVERITIES:
         raise InputError("severity must be low, medium, high, or critical")
     require_text(case.get("failure"), "failure")
+    repair_action = require_text(case.get("repair_action"), "repair_action")
+    recovery_criterion = require_text(case.get("recovery_criterion"), "recovery_criterion")
     evidence = case.get("evidence")
     if not isinstance(evidence, list):
         raise InputError("evidence must be a list")
@@ -123,6 +126,9 @@ def assess(case: dict, policy: dict) -> dict:
         raise InputError("allowed_remedies must be a non-empty list of strings")
     agent_limit = money(policy.get("agent_limit"), "policy.agent_limit")
     manager_limit = money(policy.get("manager_limit"), "policy.manager_limit")
+    repeat_window_days = policy.get("minimum_repeat_window_days")
+    if type(repeat_window_days) is not int or not 1 <= repeat_window_days <= 365:
+        raise InputError("minimum_repeat_window_days must be an integer from 1 to 365")
     if agent_limit > manager_limit:
         raise InputError("agent_limit cannot exceed manager_limit")
     if currency != policy_currency:
@@ -147,7 +153,11 @@ def assess(case: dict, policy: dict) -> dict:
         status = "agent_review"
 
     return {
-        "schema_version": 1,
+        "schema_version": 2,
+        "assessment_sha256": hashlib.sha256(
+            json.dumps({"case": case, "policy": policy}, sort_keys=True, separators=(",", ":"),
+                       ensure_ascii=False).encode("utf-8")
+        ).hexdigest(),
         "case_id": case_id,
         "policy_version": version,
         "status": status,
@@ -155,6 +165,9 @@ def assess(case: dict, policy: dict) -> dict:
         "missing_evidence_ids": sorted(set(missing_ids)),
         "severity": severity,
         "evidence_ids": sorted(evidence_ids),
+        "repair_action": repair_action,
+        "recovery_criterion": recovery_criterion,
+        "minimum_repeat_window_days": repeat_window_days,
         "action": {
             "remedy": remedy,
             "amount": f"{amount:.2f}",
@@ -165,9 +178,11 @@ def assess(case: dict, policy: dict) -> dict:
     }
 
 
-def record(db_path: str, packet: dict, outcome: dict) -> None:
+def record(db_path: str, packet: dict, outcome: dict, case: dict, policy: dict) -> None:
     """Insert one observed outcome; never overwrite an earlier audit record."""
-    if packet.get("schema_version") != 1 or packet.get("status") not in {"agent_review", "manager_review", "policy_exception"}:
+    if packet != assess(case, policy):
+        raise InputError("packet no longer matches the case and policy; reassess before recording")
+    if packet["status"] not in {"agent_review", "manager_review", "policy_exception"}:
         raise InputError("only a current packet with sufficient evidence can be recorded")
     case_id = require_text(packet.get("case_id"), "packet.case_id")
     if not CASE_ID.fullmatch(case_id):
@@ -187,6 +202,28 @@ def record(db_path: str, packet: dict, outcome: dict) -> None:
     repeat = outcome.get("repeat_complaint")
     if resolution not in RESOLUTIONS or retained not in RETENTION or not isinstance(repeat, bool):
         raise InputError("outcome resolution, retained, or repeat_complaint is invalid")
+    follow_up_completed_at = require_date(outcome.get("follow_up_completed_at"), "outcome.follow_up_completed_at")
+    resolution_basis = outcome.get("resolution_basis")
+    if resolution_basis not in {"customer_confirmed", "independent_record", "unverified"}:
+        raise InputError("resolution_basis must be customer_confirmed, independent_record, or unverified")
+    resolution_ref = outcome.get("resolution_evidence_ref", "")
+    if resolution == "resolved":
+        if resolution_basis == "unverified":
+            raise InputError("resolved outcomes require a verified resolution_basis")
+        resolution_ref = require_text(resolution_ref, "outcome.resolution_evidence_ref")
+    elif resolution_basis != "unverified":
+        resolution_ref = require_text(resolution_ref, "outcome.resolution_evidence_ref")
+    elif not isinstance(resolution_ref, str):
+        raise InputError("outcome.resolution_evidence_ref must be a string")
+    repeat_window_end = require_date(outcome.get("repeat_window_end"), "outcome.repeat_window_end")
+    repeat_check_ref = require_text(outcome.get("repeat_check_ref"), "outcome.repeat_check_ref")
+    retention_observed_at = outcome.get("retention_observed_at")
+    retention_ref = outcome.get("retention_evidence_ref", "")
+    if retained != "unknown":
+        retention_observed_at = require_date(retention_observed_at, "outcome.retention_observed_at")
+        retention_ref = require_text(retention_ref, "outcome.retention_evidence_ref")
+    elif retention_observed_at is not None or retention_ref:
+        raise InputError("unknown retention cannot have retention observation fields")
     approval_ref = outcome.get("approval_ref", "")
     if actual_amount > 0:
         approval_ref = require_text(approval_ref, "outcome.approval_ref")
@@ -198,26 +235,57 @@ def record(db_path: str, packet: dict, outcome: dict) -> None:
     elif not isinstance(exception_ref, str):
         raise InputError("outcome.exception_approval_ref must be a string")
     recorded_at = require_date(outcome.get("recorded_at"), "outcome.recorded_at")
+    if recorded_at > date.today().isoformat():
+        raise InputError("recorded_at cannot be in the future")
+    if follow_up_completed_at > recorded_at or repeat_window_end > recorded_at:
+        raise InputError("follow-up and repeat observation must occur by recorded_at")
+    if repeat_window_end < follow_up_completed_at:
+        raise InputError("repeat_window_end cannot precede follow_up_completed_at")
+    if date.fromisoformat(repeat_window_end) < date.fromisoformat(follow_up_completed_at) + timedelta(days=policy["minimum_repeat_window_days"]):
+        raise InputError("repeat observation window is shorter than policy minimum")
+    if retention_observed_at is not None and (retention_observed_at < follow_up_completed_at or retention_observed_at > recorded_at):
+        raise InputError("retention observation must occur after follow-up and by recorded_at")
     amount_cents = int(actual_amount * 100)
 
     # The ledger intentionally omits complaint text and evidence observations.
     with closing(sqlite3.connect(db_path, timeout=10)) as connection:
-      with connection:
-        connection.execute("""CREATE TABLE IF NOT EXISTS outcomes (
-            case_id TEXT PRIMARY KEY, policy_version TEXT NOT NULL,
-            review_status TEXT NOT NULL, remedy TEXT NOT NULL,
-            amount_cents INTEGER NOT NULL, currency TEXT NOT NULL,
-            resolution TEXT NOT NULL, retained TEXT NOT NULL,
-            repeat_complaint INTEGER NOT NULL, approval_ref TEXT NOT NULL,
-            exception_approval_ref TEXT NOT NULL,
-            recorded_at TEXT NOT NULL)""")
-        try:
-            connection.execute("INSERT INTO outcomes VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                               (case_id, policy_version, packet["status"], remedy,
-                                amount_cents, currency, resolution, retained,
-                                int(repeat), approval_ref, exception_ref, recorded_at))
-        except sqlite3.IntegrityError as exc:
-            raise InputError(f"case {case_id} is already recorded") from exc
+        with connection:
+            connection.execute("""CREATE TABLE IF NOT EXISTS outcomes (
+                case_id TEXT PRIMARY KEY, policy_version TEXT NOT NULL,
+                review_status TEXT NOT NULL, remedy TEXT NOT NULL,
+                amount_cents INTEGER NOT NULL, currency TEXT NOT NULL,
+                resolution TEXT NOT NULL, retained TEXT NOT NULL,
+                repeat_complaint INTEGER NOT NULL, approval_ref TEXT NOT NULL,
+                exception_approval_ref TEXT NOT NULL,
+                recorded_at TEXT NOT NULL,
+                assessment_sha256 TEXT, follow_up_due TEXT, follow_up_completed_at TEXT,
+                resolution_basis TEXT, resolution_evidence_ref TEXT,
+                repeat_window_end TEXT, repeat_check_ref TEXT,
+                retention_observed_at TEXT, retention_evidence_ref TEXT)""")
+            # Legacy rows remain visible but are excluded from evidence-verified metrics.
+            existing = {row[1] for row in connection.execute("PRAGMA table_info(outcomes)")}
+            for column in ("assessment_sha256", "follow_up_due", "follow_up_completed_at",
+                           "resolution_basis", "resolution_evidence_ref", "repeat_window_end",
+                           "repeat_check_ref", "retention_observed_at", "retention_evidence_ref"):
+                if column not in existing:
+                    connection.execute(f"ALTER TABLE outcomes ADD COLUMN {column} TEXT")
+            try:
+                connection.execute("""INSERT INTO outcomes (
+                    case_id, policy_version, review_status, remedy, amount_cents, currency,
+                    resolution, retained, repeat_complaint, approval_ref, exception_approval_ref,
+                    recorded_at, assessment_sha256, follow_up_due, follow_up_completed_at,
+                    resolution_basis, resolution_evidence_ref, repeat_window_end, repeat_check_ref,
+                    retention_observed_at, retention_evidence_ref)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                                   (case_id, policy_version, packet["status"], remedy,
+                                    amount_cents, currency, resolution, retained,
+                                    int(repeat), approval_ref, exception_ref, recorded_at,
+                                    packet["assessment_sha256"], action["follow_up_due"],
+                                    follow_up_completed_at, resolution_basis, resolution_ref,
+                                    repeat_window_end, repeat_check_ref, retention_observed_at,
+                                    retention_ref))
+            except sqlite3.IntegrityError as exc:
+                raise InputError(f"case {case_id} is already recorded") from exc
 
 
 def report(db_path: str) -> dict:
@@ -226,24 +294,40 @@ def report(db_path: str) -> dict:
         raise InputError("ledger does not exist")
     with closing(sqlite3.connect(db_path)) as connection:
         try:
-            rows = connection.execute("SELECT currency, resolution, retained, repeat_complaint, amount_cents FROM outcomes").fetchall()
+            columns = {row[1] for row in connection.execute("PRAGMA table_info(outcomes)")}
+            if not {"currency", "resolution", "retained", "repeat_complaint", "amount_cents"} <= columns:
+                raise InputError("ledger schema is missing or invalid")
+            optional = [name if name in columns else "NULL" for name in
+                        ("assessment_sha256", "follow_up_due", "follow_up_completed_at")]
+            rows = connection.execute(
+                "SELECT currency, resolution, retained, repeat_complaint, amount_cents, "
+                + ", ".join(optional) + " FROM outcomes"
+            ).fetchall()
         except sqlite3.OperationalError as exc:
             raise InputError("ledger schema is missing or invalid") from exc
     by_currency: dict[str, dict] = {}
-    for currency, resolution, retained, repeat, cents in rows:
-        stats = by_currency.setdefault(currency, {"cases": 0, "resolved": 0, "repeat_complaints": 0,
+    for currency, resolution, retained, repeat, cents, digest, due, completed in rows:
+        stats = by_currency.setdefault(currency, {"cases": 0, "verified_cases": 0,
+                                                 "legacy_unverified_cases": 0, "resolved": 0,
+                                                 "follow_up_on_time": 0, "follow_up_late": 0,
+                                                 "repeat_complaints": 0,
                                                  "retained_yes": 0, "retained_no": 0,
                                                  "retained_unknown": 0, "concession_cents": 0})
         stats["cases"] += 1
+        stats["concession_cents"] += cents
+        if not digest or not due or not completed:
+            stats["legacy_unverified_cases"] += 1
+            continue
+        stats["verified_cases"] += 1
         stats["resolved"] += resolution == "resolved"
+        stats["follow_up_on_time" if completed <= due else "follow_up_late"] += 1
         stats["repeat_complaints"] += bool(repeat)
         stats[f"retained_{retained}"] += 1
-        stats["concession_cents"] += cents
     for stats in by_currency.values():
         stats["concession_total"] = f"{Decimal(stats.pop('concession_cents')) / 100:.2f}"
         stats["known_retention_denominator"] = stats["retained_yes"] + stats["retained_no"]
-    return {"schema_version": 1, "total_cases": len(rows), "by_currency": by_currency,
-            "interpretation": "Descriptive outcomes only; no causal retention or ROI claim."}
+    return {"schema_version": 2, "total_cases": len(rows), "by_currency": by_currency,
+            "interpretation": "Verified metrics exclude legacy rows; all metrics are descriptive, not causal ROI."}
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -255,6 +339,8 @@ def main(argv: list[str] | None = None) -> int:
     assess_parser.add_argument("--output", required=True)
     record_parser = commands.add_parser("record", help="Record an approved case outcome")
     record_parser.add_argument("--packet", required=True)
+    record_parser.add_argument("--case", required=True)
+    record_parser.add_argument("--policy", required=True)
     record_parser.add_argument("--outcome", required=True)
     record_parser.add_argument("--db", required=True)
     report_parser = commands.add_parser("report", help="Summarize observed outcomes")
@@ -266,7 +352,8 @@ def main(argv: list[str] | None = None) -> int:
             Path(args.output).write_text(json.dumps(packet, indent=2) + "\n", encoding="utf-8")
             print(json.dumps({"status": packet["status"], "output": args.output}))
         elif args.command == "record":
-            record(args.db, read_json(args.packet), read_json(args.outcome))
+            record(args.db, read_json(args.packet), read_json(args.outcome),
+                   read_json(args.case), read_json(args.policy))
             print(json.dumps({"recorded": True, "db": args.db}))
         else:
             print(json.dumps(report(args.db), indent=2))
@@ -278,4 +365,3 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
