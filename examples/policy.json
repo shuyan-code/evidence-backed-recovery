@@ -1,0 +1,5 @@
+{
+  "version": "2026-Q3", "currency": "USD",
+  "allowed_remedies": ["repair", "service_credit"],
+  "agent_limit": "25.00", "manager_limit": "100.00"
+}

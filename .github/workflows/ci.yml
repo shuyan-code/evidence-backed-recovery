@@ -1,0 +1,27 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Run behavioral tests
+        run: python -m unittest discover -s tests -v
+      - name: Compile Python sources
+        run: python -m compileall -q skills tests
+      - name: Check skill metadata
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          skill = Path('skills/evidence-backed-recovery/SKILL.md').read_text(encoding='utf-8')
+          assert skill.startswith('---\nname: evidence-backed-recovery\n')
+          assert 'description:' in skill.split('---', 2)[1]
+          assert '[TODO' not in skill
+          PY
