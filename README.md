@@ -54,7 +54,7 @@ The open-source core is free under MIT. A support team can use it immediately wi
 
 ## Quality and limits
 
-Run `python -m unittest discover -s tests -v` and the skill validator shown in [CONTRIBUTING.md](CONTRIBUTING.md). CI runs both on push and pull requests. The policy gate does not authenticate approval references or provide a tamper-evident audit trail; production integrations should verify references against the organization's source system. This repository contains no CRM connector or live billing action.
+Run `python -m unittest discover -s tests -v` and the skill validator shown in [CONTRIBUTING.md](CONTRIBUTING.md). CI runs behavioral tests, Python compilation, and an independent skill metadata check on push and pull requests. The policy gate does not authenticate approval references or provide a tamper-evident audit trail; production integrations should verify references against the organization's source system. This repository contains no CRM connector or live billing action.
 
 ## License
 
