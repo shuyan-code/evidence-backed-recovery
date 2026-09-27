@@ -1,6 +1,14 @@
 # Evidence-Backed Recovery
 
-An open-source Agent Skill for B2B support and customer-success teams handling emotionally charged service failures. It turns a complaint into an evidence-linked recovery proposal, checks concessions against a local policy, requires human approval for business actions, and records evidence-qualified follow-up outcomes in a minimal SQLite ledger.
+[![CI](https://github.com/shuyan-code/evidence-backed-recovery/actions/workflows/ci.yml/badge.svg)](https://github.com/shuyan-code/evidence-backed-recovery/actions/workflows/ci.yml)
+[![MIT License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
+
+An open-source Agent Skill and dependency-free Python CLI for **B2B customer support recovery**. Link a complaint to evidence, check a proposed remedy against policy, route decisions to a human, and track whether follow-up worked. It does not send messages or issue refunds.
+
+**Good fit:** support or customer-success teams with written concession rules that need a reviewable way to handle serious service failures.
+
+[Try the example](#try-it) · [Read the market research](docs/market-research.md) · [Contribute](CONTRIBUTING.md)
 
 ## Why this exists
 
@@ -12,22 +20,33 @@ Sentiment labels and empathetic reply drafts do not tell a team whether the clai
 - **Customer-success manager:** reviews a proposed concession against policy and records actual authorization in the organization's normal system.
 - **Operations analyst:** examines evidence-qualified resolution, follow-up timeliness, repeat complaints after a defined window, known retention, and actual concession cost by currency. These are descriptive metrics; the tool does not claim causal ROI.
 
-## Install
+## Try it
 
-Copy `skills/evidence-backed-recovery` into your agent's skill directory, or point a compatible agent to its `SKILL.md`. Python 3.11+ is required for the optional CLI. The CLI has no third-party dependencies and makes no network requests.
+Clone the repository and run the example with Python 3.11 or newer. The CLI has no third-party dependencies and makes no network requests.
 
 ```bash
+git clone https://github.com/shuyan-code/evidence-backed-recovery.git
+cd evidence-backed-recovery
 python skills/evidence-backed-recovery/scripts/recovery.py assess --case examples/case.json --policy examples/policy.json --output packet.json
 ```
 
-Review `packet.json` before any external action. A `manager_review` packet is a request for review, not an approval. Record an outcome only after the real customer interaction and required authorization:
+The sample produces a `manager_review` packet because the proposed credit exceeds the agent limit. A review status is not authorization. Inspect the packet, then try the sample record and report commands:
 
 ```bash
 python skills/evidence-backed-recovery/scripts/recovery.py record --case examples/case.json --policy examples/policy.json --packet packet.json --outcome examples/outcome.json --db recovery.sqlite3
 python skills/evidence-backed-recovery/scripts/recovery.py report --db recovery.sqlite3
 ```
 
-The example approval and evidence references are synthetic. Never reuse them for a real case. The recorder rechecks the case and policy against the packet, requires verified resolution evidence, and rejects an outcome until the policy's minimum repeat-contact observation window has elapsed. It also rejects a future recording date, so the host clock must be reliable. See [the schema](skills/evidence-backed-recovery/references/schema.md) for fields and decision statuses.
+The sample approval and evidence references are synthetic; never reuse them for a real case. For agent use, copy `skills/evidence-backed-recovery` into your agent's skill directory or point a compatible agent to its `SKILL.md`. The recorder rechecks the case and policy against the packet, requires verified resolution evidence, and rejects outcomes recorded before the minimum repeat-contact observation window elapses. See [the schema](skills/evidence-backed-recovery/references/schema.md) for all fields and decision statuses.
+
+## What it checks
+
+- **Evidence:** keeps customer statements separate from independent operational records.
+- **Policy:** applies deterministic remedy and amount limits, with human review for exceptions and critical failures.
+- **Recovery:** requires a repair action, an observable recovery criterion, a named owner, and dated follow-up.
+- **Outcomes:** tracks verified resolution, repeat contact after the configured window, known retention, and actual concession cost in a local SQLite ledger.
+
+The workflow is designed as a portable review component alongside an existing ticketing system, not a replacement for one.
 
 ## Decision flow
 
@@ -50,6 +69,10 @@ The skill drafts communication, but it never sends messages, issues credits, cha
 ## Commercial loop
 
 The open-source core is free under MIT. A support team can pilot it with existing tickets and policy. The measurable value hypothesis is reduced rework and more consistent recovery decisions: evidence, repair criteria, and approval are checked before a concession, and outcomes and costs are measured after follow-up. A viable service business around this core would offer deployment, policy configuration, verified integrations, and operations reporting. That is a proposed business model, not a claim of validated sales or achieved retention lift. Manual JSON entry is a real barrier to high-volume adoption; the [market analysis](docs/market-research.md) defines a pilot that can disprove the business hypothesis.
+
+## Help improve it
+
+If this workflow is useful, a GitHub star helps other support and customer-success teams discover it. Bug reports and feature requests are welcome through [GitHub Issues](https://github.com/shuyan-code/evidence-backed-recovery/issues). Please share only synthetic or fully de-identified examples; never post customer records, private policies, or approval data.
 
 ## Quality and limits
 

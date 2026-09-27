@@ -1,0 +1,31 @@
+name: Feature request
+description: Suggest an improvement for the recovery workflow
+title: "feature: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: >-
+        Please describe the workflow problem. Do not include customer data, private policies,
+        credentials, or real approval references.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem to solve
+      description: Who encounters this problem, and at what point in recovery?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+      description: Describe the smallest change that would help.
+    validations:
+      required: true
+  - type: textarea
+    id: tradeoffs
+    attributes:
+      label: Constraints or tradeoffs
+      description: Note policy, privacy, or operational concerns.
+    validations:
+      required: false
