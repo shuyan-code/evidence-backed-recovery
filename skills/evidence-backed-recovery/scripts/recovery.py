@@ -289,7 +289,7 @@ def record(db_path: str, packet: dict, outcome: dict, case: dict, policy: dict) 
 
 
 def report(db_path: str) -> dict:
-    """Summarize observed outcomes without claiming causal business impact."""
+    """Summarize observed outcomes and explicit-denominator pilot KPIs."""
     if not Path(db_path).is_file():
         raise InputError("ledger does not exist")
     with closing(sqlite3.connect(db_path)) as connection:
@@ -297,37 +297,73 @@ def report(db_path: str) -> dict:
             columns = {row[1] for row in connection.execute("PRAGMA table_info(outcomes)")}
             if not {"currency", "resolution", "retained", "repeat_complaint", "amount_cents"} <= columns:
                 raise InputError("ledger schema is missing or invalid")
-            optional = [name if name in columns else "NULL" for name in
-                        ("assessment_sha256", "follow_up_due", "follow_up_completed_at")]
+            optional_names = ("assessment_sha256", "follow_up_due", "follow_up_completed_at",
+                              "resolution_basis", "resolution_evidence_ref", "repeat_window_end",
+                              "repeat_check_ref", "retention_observed_at", "retention_evidence_ref")
+            optional = [name if name in columns else "NULL" for name in optional_names]
             rows = connection.execute(
                 "SELECT currency, resolution, retained, repeat_complaint, amount_cents, "
-                + ", ".join(optional) + " FROM outcomes"
+                + ", ".join(optional) + ", recorded_at FROM outcomes"
             ).fetchall()
         except sqlite3.OperationalError as exc:
             raise InputError("ledger schema is missing or invalid") from exc
     by_currency: dict[str, dict] = {}
-    for currency, resolution, retained, repeat, cents, digest, due, completed in rows:
+    for (currency, resolution, retained, repeat, cents, digest, due, completed,
+         resolution_basis, resolution_ref, repeat_window_end, repeat_check_ref,
+         retention_observed_at, retention_ref, recorded_at) in rows:
         stats = by_currency.setdefault(currency, {"cases": 0, "verified_cases": 0,
                                                  "legacy_unverified_cases": 0, "resolved": 0,
+                                                 "incomplete_unverified_cases": 0,
                                                  "follow_up_on_time": 0, "follow_up_late": 0,
                                                  "repeat_complaints": 0,
                                                  "retained_yes": 0, "retained_no": 0,
-                                                 "retained_unknown": 0, "concession_cents": 0})
+                                                 "retained_unknown": 0,
+                                                 "concession_cents_all": 0,
+                                                 "concession_cents_verified": 0})
         stats["cases"] += 1
-        stats["concession_cents"] += cents
-        if not digest or not due or not completed:
+        stats["concession_cents_all"] += cents
+        has_resolution_evidence = (
+            resolution_basis == "unverified" and resolution != "resolved"
+        ) or bool(resolution_basis in {"customer_confirmed", "independent_record"} and resolution_ref)
+        has_retention_evidence = retained == "unknown" or bool(retention_observed_at and retention_ref)
+        is_verified = bool(
+            digest and due and completed and resolution_basis and has_resolution_evidence
+            and repeat_window_end and repeat_check_ref and recorded_at
+            and completed <= recorded_at and repeat_window_end <= recorded_at
+            and has_retention_evidence
+        )
+        if not digest:
             stats["legacy_unverified_cases"] += 1
             continue
+        if not is_verified:
+            stats["incomplete_unverified_cases"] += 1
+            continue
         stats["verified_cases"] += 1
+        stats["concession_cents_verified"] += cents
         stats["resolved"] += resolution == "resolved"
         stats["follow_up_on_time" if completed <= due else "follow_up_late"] += 1
         stats["repeat_complaints"] += bool(repeat)
         stats[f"retained_{retained}"] += 1
     for stats in by_currency.values():
-        stats["concession_total"] = f"{Decimal(stats.pop('concession_cents')) / 100:.2f}"
+        stats["concession_total"] = f"{Decimal(stats.pop('concession_cents_all')) / 100:.2f}"
+        stats["verified_concession_total"] = f"{Decimal(stats.pop('concession_cents_verified')) / 100:.2f}"
         stats["known_retention_denominator"] = stats["retained_yes"] + stats["retained_no"]
+        stats["rates"] = {
+            "evidence_coverage": _rate(stats["verified_cases"], stats["cases"]),
+            "verified_resolution": _rate(stats["resolved"], stats["verified_cases"]),
+            "on_time_follow_up": _rate(stats["follow_up_on_time"], stats["verified_cases"]),
+            "repeat_complaint": _rate(stats["repeat_complaints"], stats["verified_cases"]),
+            "retention_observation_coverage": _rate(stats["known_retention_denominator"], stats["verified_cases"]),
+            "retained_among_known": _rate(stats["retained_yes"], stats["known_retention_denominator"]),
+        }
     return {"schema_version": 2, "total_cases": len(rows), "by_currency": by_currency,
-            "interpretation": "Verified metrics exclude legacy rows; all metrics are descriptive, not causal ROI."}
+            "interpretation": "Verified metrics exclude legacy and incomplete rows; all metrics are descriptive, not causal ROI."}
+
+
+def _rate(numerator: int, denominator: int) -> dict:
+    """Return a rate with its denominator so small samples are interpretable."""
+    return {"numerator": numerator, "denominator": denominator,
+            "percent": round(numerator * 100 / denominator, 1) if denominator else None}
 
 
 def main(argv: list[str] | None = None) -> int:

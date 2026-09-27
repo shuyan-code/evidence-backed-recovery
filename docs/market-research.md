@@ -56,13 +56,15 @@ Version 2 narrows the output contract:
 2. The outcome packet is reassessed against the exact case and policy at recording time. An edited or stale packet fails locally. This is a consistency check, not authentication of the files or the external approver.
 3. A resolved case needs a customer confirmation or independent operational record. The CLI distinguishes that from an unverified outcome.
 4. A repeat-complaint result has a policy-defined minimum observation window and a source reference. Retention remains `unknown` until an actual renewal or cancellation event is referenced.
-5. Reports separate version 1 legacy records from evidence-qualified version 2 metrics. They report actual concession cost, not proposed spend, and do not call descriptive results causal ROI.
+5. Reports separate legacy or incomplete records from evidence-qualified metrics and expose key rates with their numerator and denominator. They show both all-record and verified-record concession totals and do not present descriptive outcomes as causal ROI.
 
 These changes are driven by the observed gaps in outcome definitions and the risk of mistaking activity for recovery. The project still does not send messages, issue credits, authenticate external approvals, or make a churn prediction.
 
 ## Commercial loop and pilot design
 
 The MIT core can be used freely. A plausible commercial service is paid policy configuration, approved ticket/incident/approval-system connectors, deployment, and operations reporting. The sale would be for integration and reliability, not exclusive access to a prompt. No price, customer, or revenue has been validated.
+
+The first paid offer should be a fixed-scope workflow pilot with an agreed entry criterion, baseline, data-handling plan, and customer-owned success thresholds. Do not sell a promised retention lift. A concrete offer and conversion path are in the [commercial pilot brief](commercial-pilot.md).
 
 Run a prospective pilot with one willing B2B support team and de-identified cases. Record a baseline for its current process, then test the new workflow without changing entitlement or compensation policy. Predefine:
 

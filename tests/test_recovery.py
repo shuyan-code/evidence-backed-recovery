@@ -210,6 +210,9 @@ class RecoveryTests(unittest.TestCase):
             self.assertEqual(stats["legacy_unverified_cases"], 1)
             self.assertEqual(stats["resolved"], 1)
             self.assertEqual(stats["concession_total"], "80.00")
+            self.assertEqual(stats["verified_concession_total"], "75.00")
+            self.assertEqual(stats["rates"]["evidence_coverage"],
+                             {"numerator": 1, "denominator": 2, "percent": 50.0})
 
     def test_record_is_unique_and_report_uses_known_retention_denominator(self):
         case, policy, outcome = fixture()
@@ -237,7 +240,28 @@ class RecoveryTests(unittest.TestCase):
             self.assertEqual(stats["repeat_complaints"], 1)
             self.assertEqual(stats["known_retention_denominator"], 1)
             self.assertEqual(stats["concession_total"], "95.00")
+            self.assertEqual(stats["verified_concession_total"], "95.00")
             self.assertEqual(stats["follow_up_on_time"], 2)
+            self.assertEqual(stats["rates"]["verified_resolution"]["percent"], 50.0)
+            self.assertEqual(stats["rates"]["repeat_complaint"]["percent"], 50.0)
+            self.assertEqual(stats["rates"]["on_time_follow_up"],
+                             {"numerator": 2, "denominator": 2, "percent": 100.0})
+            self.assertEqual(stats["rates"]["retention_observation_coverage"]["percent"], 50.0)
+            self.assertEqual(stats["rates"]["retained_among_known"]["percent"], 0.0)
+
+    def test_report_excludes_records_missing_required_outcome_evidence(self):
+        case, policy, outcome = fixture()
+        packet = recovery.assess(case, policy)
+        with tempfile.TemporaryDirectory() as directory:
+            db = str(Path(directory) / "ledger.db")
+            recovery.record(db, packet, outcome, case, policy)
+            with closing(sqlite3.connect(db)) as connection:
+                with connection:
+                    connection.execute("UPDATE outcomes SET repeat_check_ref = NULL")
+            stats = recovery.report(db)["by_currency"]["USD"]
+            self.assertEqual(stats["verified_cases"], 0)
+            self.assertEqual(stats["incomplete_unverified_cases"], 1)
+            self.assertIsNone(stats["rates"]["verified_resolution"]["percent"])
 
     def test_cli_round_trip(self):
         case, policy, outcome = fixture()

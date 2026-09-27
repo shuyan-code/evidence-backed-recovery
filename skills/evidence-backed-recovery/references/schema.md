@@ -64,3 +64,9 @@ For a `policy_exception` packet, add `"exception_approval_ref": "exception-42"` 
 ## Version 2 recording and legacy data
 
 Run `record` with `--case`, `--policy`, `--packet`, `--outcome`, and `--db`. The packet must exactly match a fresh assessment of the supplied case and policy. This prevents a stale or edited packet from being accepted by the local CLI; it does not authenticate the input files or external approval references. Existing version 1 SQLite rows are retained when the database schema is extended. Reports mark them `legacy_unverified_cases` and exclude them from evidence-qualified outcome counts while retaining their recorded concession cost.
+
+## Report and pilot metrics
+
+`report --db` returns counts and percentage rates by currency. Every percentage includes its numerator and denominator; a percentage is `null` when its denominator is zero. `evidence_coverage` is the number of complete evidence-qualified records divided by all ledger rows. Resolution, on-time follow-up, and repeat-complaint rates use only complete records. `retention_observation_coverage` shows how many verified records have an observed renewal or cancellation; `retained_among_known` uses only those observed events. `concession_total` includes all rows, while `verified_concession_total` excludes legacy or incomplete rows.
+
+Use these as descriptive pilot measures against a separately recorded baseline. Keep the eligible-case definition and observation windows consistent; the report does not compare cohorts, estimate causal impact, or calculate ROI. A zero-known-retention denominator produces `null`, not zero percent. Version 1 records without an assessment digest are counted as `legacy_unverified_cases`; newer records missing required outcome evidence are counted separately as `incomplete_unverified_cases`. Both are excluded from verified rates.

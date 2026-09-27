@@ -68,7 +68,7 @@ The skill drafts communication, but it never sends messages, issues credits, cha
 
 ## Commercial loop
 
-The open-source core is free under MIT. A support team can pilot it with existing tickets and policy. The measurable value hypothesis is reduced rework and more consistent recovery decisions: evidence, repair criteria, and approval are checked before a concession, and outcomes and costs are measured after follow-up. A viable service business around this core would offer deployment, policy configuration, verified integrations, and operations reporting. That is a proposed business model, not a claim of validated sales or achieved retention lift. Manual JSON entry is a real barrier to high-volume adoption; the [market analysis](docs/market-research.md) defines a pilot that can disprove the business hypothesis.
+The open-source core is free under MIT. Its report gives evidence coverage, verified resolution, on-time follow-up, repeat-complaint and known-retention rates with explicit denominators, plus actual concession cost. A team can compare those descriptive measures with a separately recorded baseline while keeping the eligible-case definition and observation windows consistent. The report does not estimate causal impact or ROI. A proposed paid offer is a fixed-scope policy and workflow pilot, followed by optional verified integrations and operations support if the pilot meets customer-defined acceptance criteria. Demand and pricing are not validated. See the [market and commercial pilot analysis](docs/market-research.md) and the [pilot offer](docs/commercial-pilot.md).
 
 ## Help improve it
 
