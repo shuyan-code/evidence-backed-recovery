@@ -3,8 +3,8 @@
   "severity": "high",
   "failure": "Three scheduled exports failed during onboarding.",
   "evidence": [
-    {"id": "E1", "source": "incident-482", "observation": "Export job failed on three scheduled runs."},
-    {"id": "E2", "source": "ticket-1042", "observation": "Customer said the delay blocked launch."}
+    {"id": "E1", "kind": "independent_record", "source": "incident-482", "observation": "Export job failed on three scheduled runs."},
+    {"id": "E2", "kind": "customer_statement", "source": "ticket-1042", "observation": "Customer said the delay blocked launch."}
   ],
   "claim_evidence_ids": ["E1", "E2"],
   "emotion_signal": {"label": "frustration", "evidence_id": "E2"},
@@ -13,3 +13,4 @@
     "owner": "support-lead", "follow_up_due": "2026-10-01"
   }
 }
+

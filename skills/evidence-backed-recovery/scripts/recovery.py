@@ -17,6 +17,7 @@ CASE_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{2,63}$")
 SEVERITIES = {"low", "medium", "high", "critical"}
 RESOLUTIONS = {"resolved", "unresolved"}
 RETENTION = {"yes", "no", "unknown"}
+EVIDENCE_KINDS = {"independent_record", "customer_statement"}
 
 
 class InputError(ValueError):
@@ -73,6 +74,7 @@ def assess(case: dict, policy: dict) -> dict:
     if not isinstance(evidence, list):
         raise InputError("evidence must be a list")
     evidence_ids: set[str] = set()
+    evidence_kinds: dict[str, str] = {}
     for item in evidence:
         if not isinstance(item, dict):
             raise InputError("each evidence item must be an object")
@@ -80,6 +82,10 @@ def assess(case: dict, policy: dict) -> dict:
         if identifier in evidence_ids:
             raise InputError(f"duplicate evidence ID: {identifier}")
         evidence_ids.add(identifier)
+        kind = item.get("kind")
+        if kind not in EVIDENCE_KINDS:
+            raise InputError("evidence.kind must be independent_record or customer_statement")
+        evidence_kinds[identifier] = kind
         require_text(item.get("source"), "evidence.source")
         require_text(item.get("observation"), "evidence.observation")
     claim_ids = case.get("claim_evidence_ids")
@@ -88,6 +94,8 @@ def assess(case: dict, policy: dict) -> dict:
     missing_ids = sorted(set(claim_ids) - evidence_ids)
     if not claim_ids:
         missing_ids.append("claim_evidence_ids")
+    if not any(evidence_kinds.get(identifier) == "independent_record" for identifier in claim_ids):
+        missing_ids.append("independent_record")
     signal = case.get("emotion_signal")
     if signal is not None:
         if not isinstance(signal, dict):
@@ -96,6 +104,8 @@ def assess(case: dict, policy: dict) -> dict:
         signal_id = require_text(signal.get("evidence_id"), "emotion_signal.evidence_id")
         if signal_id not in evidence_ids:
             missing_ids.append(signal_id)
+        elif evidence_kinds[signal_id] != "customer_statement":
+            raise InputError("emotion_signal must reference a customer_statement")
 
     proposal = case.get("proposal")
     if not isinstance(proposal, dict):
@@ -268,3 +278,4 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+

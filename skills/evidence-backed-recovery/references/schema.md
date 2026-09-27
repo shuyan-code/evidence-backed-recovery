@@ -10,8 +10,8 @@ Money amounts are non-negative decimal strings in the policy currency, with at m
   "severity": "high",
   "failure": "Three scheduled exports failed during onboarding.",
   "evidence": [
-    {"id": "E1", "source": "incident-482", "observation": "Export job failed on three scheduled runs."},
-    {"id": "E2", "source": "ticket-1042", "observation": "Customer said the delay blocked launch."}
+    {"id": "E1", "kind": "independent_record", "source": "incident-482", "observation": "Export job failed on three scheduled runs."},
+    {"id": "E2", "kind": "customer_statement", "source": "ticket-1042", "observation": "Customer said the delay blocked launch."}
   ],
   "claim_evidence_ids": ["E1", "E2"],
   "emotion_signal": {"label": "frustration", "evidence_id": "E2"},
@@ -22,7 +22,7 @@ Money amounts are non-negative decimal strings in the policy currency, with at m
 }
 ```
 
-`severity` is `low`, `medium`, `high`, or `critical`. The emotion label is descriptive, not a diagnosis. `claim_evidence_ids` must point to provided evidence. Omit `emotion_signal` if the customer's words do not support it. A `critical` case always escalates for human review.
+`severity` is `low`, `medium`, `high`, or `critical`. `evidence.kind` is `independent_record` or `customer_statement`. The emotion label is descriptive, not a diagnosis, and must reference a customer statement. `claim_evidence_ids` must point to provided evidence and include at least one independent record before a recovery proposal proceeds. Omit `emotion_signal` if the customer's words do not support it. A `critical` case always escalates for human review.
 
 ## Policy JSON
 
@@ -50,3 +50,4 @@ Limits are maximum proposed concession values, not authority to issue them. A re
 `resolution` is `resolved` or `unresolved`; `retained` is `yes`, `no`, or `unknown`. `actual_amount` is the concession actually issued and cannot exceed the assessed proposal. `approval_ref` identifies real authorization for a nonzero concession. The ledger stores only case ID, policy and outcome fields, with no complaint text or evidence observations. Re-recording a case fails so a user investigates rather than silently overwrites an audit event.
 
 For a `policy_exception` packet, add `"exception_approval_ref": "exception-42"` to the outcome after an authorized human approves the exception. A `needs_evidence` packet cannot be recorded until the evidence gap is fixed and the case is reassessed.
+

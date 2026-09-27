@@ -18,8 +18,8 @@ def fixture():
     case = {
         "case_id": "CASE-1042", "severity": "high", "failure": "Scheduled export failed.",
         "evidence": [
-            {"id": "E1", "source": "incident-482", "observation": "Export failed three times."},
-            {"id": "E2", "source": "ticket-1042", "observation": "Customer reported a launch delay."},
+            {"id": "E1", "kind": "independent_record", "source": "incident-482", "observation": "Export failed three times."},
+            {"id": "E2", "kind": "customer_statement", "source": "ticket-1042", "observation": "Customer reported a launch delay."},
         ],
         "claim_evidence_ids": ["E1", "E2"],
         "emotion_signal": {"label": "frustration", "evidence_id": "E2"},
@@ -54,6 +54,19 @@ class RecoveryTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             with self.assertRaises(recovery.InputError):
                 recovery.record(str(Path(directory) / "ledger.db"), packet, fixture()[2])
+
+    def test_customer_statement_alone_cannot_verify_failure(self):
+        case, policy, _ = fixture()
+        case["claim_evidence_ids"] = ["E2"]
+        packet = recovery.assess(case, policy)
+        self.assertEqual(packet["status"], "needs_evidence")
+        self.assertIn("independent_record", packet["missing_evidence_ids"])
+
+    def test_emotion_signal_must_reference_customer_statement(self):
+        case, policy, _ = fixture()
+        case["emotion_signal"]["evidence_id"] = "E1"
+        with self.assertRaises(recovery.InputError):
+            recovery.assess(case, policy)
 
     def test_critical_and_unlisted_remedy_escalate(self):
         case, policy, _ = fixture()
@@ -146,3 +159,4 @@ class RecoveryTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
